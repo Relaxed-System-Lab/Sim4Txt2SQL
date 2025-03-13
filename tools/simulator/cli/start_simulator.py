@@ -1,26 +1,21 @@
 import json
 from dataclasses import asdict
-from tools.simulator.global_engine import LLMGlobalEngine
-from tools.simulator.utils import load_trace
-from scratchpad.utils.ui import make_table
+from simulator.core.global_engine import LLMGlobalEngine
+from simulator.core.utils import load_trace
+from simulator.ui import make_table
 from rich.console import Console
 
 console = Console()
 
-
 def run_simulation(args):
     print(args)
-    workload = load_trace(args.input, float(args.arrival_rate))
-    workload = workload[:30]
-    server = LLMGlobalEngine()
+    server = LLMGlobalEngine(args.input, float(args.arrival_rate))
 
     for i in range(args.n_engines):
-        server.add_engine("meta-llama/Llama-2-7b-hf", "nvidia_A100", 4, 4, 4)
-
-    for req in workload:
-        server.add_request(req)
+        server.add_engine("meta-llama/Llama-2-7b-hf", "nvidia_A100", 4,4,4)
 
     server.start()
+    server.save_results("output.json")
 
     with open(args.trace_output, "w") as f:
         data = {"traceEvents": [asdict(x) for x in server.trace]}

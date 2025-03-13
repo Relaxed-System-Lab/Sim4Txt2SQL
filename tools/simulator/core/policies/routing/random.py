@@ -1,6 +1,6 @@
 from ._base import BaseGlobalToLocalPolicy
-from adaml.simulator.request import GenerationRequest
-from adaml.simulator.engine import LLMEngine
+from simulator.core.request import GenerationRequest
+from simulator.core.engine import LLMEngine
 from typing import Dict, List
 import numpy as np
 

@@ -1,9 +1,9 @@
 from copy import deepcopy
 from collections import deque
-from adaml.internal.analyzer import ModelAnalyzer
-from adaml.simulator.trace import TraceEvent
-from adaml.simulator.memory_planner import MemoryPlanner
-from adaml.internal.configs.hardware_params import hardware_params
+from simulator.internal.analyzer import ModelAnalyzer
+from simulator.core.trace import TraceEvent
+from simulator.core.memory_planner import MemoryPlanner
+from simulator.internal.configs.hardware_params import hardware_params
 from typing import List, Deque
 
 from .request import GenerationRequest
@@ -20,7 +20,7 @@ class LLMEngine:
         self.analyzer = ModelAnalyzer(
             model_id=model_name,
             hardware=hardware_name,
-            config_file="adaml/internal/configs/llama.py",
+            config_file="simulator/internal/configs/llama.py",
             source="huggingface",
         )
         self.waiting: Deque[GenerationRequest] = deque()
@@ -90,16 +90,18 @@ class LLMEngine:
                 decode_result["total_results"]["decode"]["inference_time"]
             )
         finished_at = max(decode_time) + start_at
+        finished_lst = []
         for req in executable_requests:
-            finished = req._decode()
+            finished = req._decode() #Check if the request is finished
             if finished:
                 req.set_generation_finished_at(finished_at)
                 self.finished_requests += 1
                 self.running.remove(req)
                 self.finished.append(req)
                 finished_requests_in_this_batch.append(req.req_id)
+                finished_lst.append(req)
         self.memory_planner.free(finished_requests_in_this_batch)
-        return finished_at, executable_requests, memory_event
+        return finished_at, executable_requests, memory_event, finished_lst
 
     def step(self, start_at: float):
         # let's assume that process one request per step is fine in terms of utilization
@@ -119,30 +121,37 @@ class LLMEngine:
                     self.create_event(
                         "prefill", handled_requests, start_at, prefill_end_at
                     ),
+                    [],
                     prefill_end_at,
                     memory_event,
                 )
             else:
                 self.failed.append(self.waiting.popleft())
-                return None, start_at + 0.0001, None
+                return None, [], start_at + 0.0001, None
 
         elif len(self.running) > 0:
             # if there's no request needs prefill, proceed to decode
             # TODO(xiaozhe): let's assume we could do infinite batch size...
-            decode_finished_at, handled_requests, memory_event = self._decode(
+            decode_finished_at, handled_requests, memory_event, finished_lst = self._decode(
                 list(self.running), start_at
             )
+            # # 添加对完成请求的处理
+            # for req in handled_requests:
+            #     finished = req._decode()
+            #     if finished and req.parent_request:
+            #         req.parent_request.update_stage(decode_finished_at)
             return (
                 self.create_event(
                     "decode", handled_requests, start_at, decode_finished_at
                 ),
+                finished_lst,
                 decode_finished_at,
                 memory_event,
             )
         else:
             # add a shift to the timer,
             # since we need to move on
-            return None, start_at + 0.0001, None
+            return None, [], start_at + 0.0001, None
 
     def create_event(self, phase, handled_requests, start_at, end_at):
         complete_events = []
