@@ -1,9 +1,15 @@
+import sys
+sys.path.append("../")
+sys.path.append("../../")
+sys.path.append("../../../")
 import json
 from dataclasses import asdict
 from simulator.core.global_engine import LLMGlobalEngine
 from simulator.core.utils import load_trace
 from simulator.ui import make_table
 from rich.console import Console
+from huggingface_hub import login
+
 
 console = Console()
 
@@ -12,10 +18,11 @@ def run_simulation(args):
     server = LLMGlobalEngine(args.input, float(args.arrival_rate))
 
     for i in range(args.n_engines):
-        server.add_engine("meta-llama/Llama-2-7b-hf", "nvidia_A100", 4,4,4)
+        server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
+        # server.add_engine("meta-llama/Llama-2-7b-hf", "nvidia_A100", 4,4,4)
 
     server.start()
-    server.save_results("output.json")
+    server.save_results("./result/output.json")
 
     with open(args.trace_output, "w") as f:
         data = {"traceEvents": [asdict(x) for x in server.trace]}
@@ -32,7 +39,7 @@ def run_simulation(args):
     print(f"--" * 10 + " Simulation Done " + "--" * 10)
 
     console.print(make_table("Summary", server.summary))
-
+    print(f"Pass rate: {server.SLO_pass_rate(float(args.SLO))}")
 
 if __name__ == "__main__":
     import argparse
@@ -41,6 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("--input", type=str, help="Input file")
     parser.add_argument("--n-engines", type=int, help="Number of engines")
     parser.add_argument("--arrival-rate", help="Arrival rate", default=None)
+    parser.add_argument("--SLO", help="Text2SQL Request SLO", default=35.28*1.5)
 
     parser.add_argument(
         "--trace-output",

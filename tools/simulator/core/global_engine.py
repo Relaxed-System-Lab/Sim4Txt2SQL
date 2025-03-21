@@ -3,11 +3,11 @@ from typing import List, Deque
 from simulator.core.engine import LLMEngine
 from simulator.core.request import GenerationRequest
 from dataclasses import dataclass
-from .policies import RandomGTLPolicy
+from .policies import EvenGTLPolicy
 import json
 import numpy as np
 from typing import Dict, List, Optional
-from request import Text2SQLRequest, GenerationRequest
+from simulator.core.request import Text2SQLRequest, GenerationRequest
 from simulator.core.arrival import PoissonProcess
 
 
@@ -20,7 +20,7 @@ class LLMGlobalEngine:
         self.supported_models: set = set()
         self._trace = []
         self.total_requests = 0
-        self.policy = RandomGTLPolicy()
+        self.policy = EvenGTLPolicy()
         self.text2sql_requests: Dict[str, Text2SQLRequest] = {}
         self.arrival_rate = arrival_rate
         self.load_requests(input_file, arrival_rate)
@@ -48,33 +48,47 @@ class LLMGlobalEngine:
         else:
             print("Arrival rate not provided, assuming all requests arrive at time 0")
             workload = [0] * len(data)        
-        for idx, request_data in enumerate(data):
-            request_data["model"] = "meta-llama/Llama-3.3-70B-Instruct"
+        # for idx, request_data in enumerate([data[0]]):
+        for idx, request_data in enumerate(data[:30]):
+            request_data["model"] = "meta-llama/Llama-3.1-70B-Instruct"
             text2sql_req = Text2SQLRequest(
                 req_id=f"text2sql_{idx}",
-                stages_config=request_data["Text2SQLRequest"]
+                gen_requests_config=request_data["Text2SQLRequest"]
             )
             self.text2sql_requests[text2sql_req.req_id] = text2sql_req
-            first_request = text2sql_req.create_next_stage_request(request_data["model"], workload[idx])
-            if first_request is not None:
-                self.pending_requests.append(first_request)
-                self.total_requests += 1
+            first_requests = text2sql_req.create_current_stage_requests(request_data["model"], workload[idx])
+            for req in first_requests:
+                if req is not None:
+                    self.pending_requests.append(req)
+                    self.total_requests += 1
     
     def handle_request_completion(self, request: GenerationRequest, current_time: float):
         if request.parent_request:
             parent = request.parent_request
-            parent.update_stage(current_time)
-            if parent.current_stage < parent.total_stages:
-                # 创建下一阶段请求
-                next_request = parent.create_next_stage_request("meta-llama/Llama-3.3-70B-Instruct", current_time)
-                if next_request is not None:
-                    self.pending_requests.append(next_request)
+            parent.update_stage(request, current_time)
+            if parent.current_requests == [] and parent.current_stage < parent.total_stages:
+                next_requests = parent.create_current_stage_requests("meta-llama/Llama-3.1-70B-Instruct", current_time)
+                for next_request in next_requests:
+                    if next_request is not None:
+                        self.pending_requests.append(next_request)
     
+    def SLO_pass_rate(self, SLO):
+        pass_rate = 0
+        for req_id, request in self.text2sql_requests.items():
+            if request.current_stage < request.total_stages:
+                continue
+            else:
+                if request.total_time <= SLO:
+                    pass_rate += 1
+        return pass_rate / len(self.text2sql_requests)
+
     def save_results(self, output_file: str):
-        results = {
-            req_id: request.total_time 
-            for req_id, request in self.text2sql_requests.items()
-        }
+        results = {}
+        for req_id, request in self.text2sql_requests.items():
+            if request.current_stage < request.total_stages:
+                results.update({req_id: -1})
+            else:
+                results.update({req_id: request.total_time})
         with open(output_file, 'w') as f:
             json.dump(results, f, indent=2)
 
