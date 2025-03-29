@@ -1,6 +1,6 @@
 from collections import deque, defaultdict
 from typing import List, Deque
-from simulator.core.engine import LLMEngine
+from simulator.core.engine_optimized import LLMEngine
 from simulator.core.request import GenerationRequest
 from dataclasses import dataclass
 from .policies import EvenGTLPolicy
@@ -9,10 +9,11 @@ import numpy as np
 from typing import Dict, List, Optional
 from simulator.core.request import Text2SQLRequest, GenerationRequest
 from simulator.core.arrival import PoissonProcess
+from simulator.core.global_waitlist import GlobalWaitlist  # Import global waitlist
 
 
-class LLMGlobalEngine:
-    def __init__(self, input_file: str, arrival_rate: float):
+class OPGlobalEngine:
+    def __init__(self, input_file: str, arrival_rate: float, slo: float):
         self.engines = defaultdict(list[LLMEngine])
         self.timers = defaultdict(dict)
         self.pending_requests: Deque[GenerationRequest] = deque()
@@ -23,19 +24,20 @@ class LLMGlobalEngine:
         self.policy = EvenGTLPolicy()
         self.text2sql_requests: Dict[str, Text2SQLRequest] = {}
         self.arrival_rate = arrival_rate
-        self.load_requests(input_file, arrival_rate)
+        self.global_waitlist = GlobalWaitlist.get_instance()  # Initialize global waitlist
+        self.load_requests(input_file, arrival_rate, slo)
 
-    def add_engine(self, model_name, hardware_name, w_bit, a_bit, kv_bit):
+    def add_engine(self, w1, w2, model_name, hardware_name, w_bit, a_bit, kv_bit):
         existing_engines = sum([len(x) for x in self.engines.values()])
         engine = LLMEngine(
-            existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
+            w1, w2, existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
         )
         self.engines[model_name].append(engine)
         self.supported_models.add(model_name)
         self.policy.prepare(self.engines)
         self.timers[model_name][engine.engine_id] = 0
 
-    def load_requests(self, input_file: str, arrival_rate: float):
+    def load_requests(self, input_file: str, arrival_rate: float, slo: float):
         with open(input_file, 'r') as f:
             data = json.load(f)
         if arrival_rate is not None and arrival_rate > 0:
@@ -53,7 +55,8 @@ class LLMGlobalEngine:
             request_data["model"] = "meta-llama/Llama-3.1-70B-Instruct"
             text2sql_req = Text2SQLRequest(
                 req_id=f"text2sql_{idx}",
-                gen_requests_config=request_data["Text2SQLRequest"]
+                gen_requests_config=request_data["Text2SQLRequest"],
+                slo=slo
             )
             self.text2sql_requests[text2sql_req.req_id] = text2sql_req
             first_requests = text2sql_req.create_current_stage_requests(request_data["model"], workload[idx])
@@ -123,11 +126,11 @@ class LLMGlobalEngine:
                 break
 
     def has_remaining_requests(self):
-        if self.pending_requests:
+        if self.pending_requests or self.global_waitlist.waitlist:
             return True
         for model in self.supported_models:
             for engine in self.engines[model]:
-                if len(engine.waiting) > 0 or len(engine.running) > 0:
+                if len(engine.running) > 0:
                     return True
         return False
 
@@ -135,8 +138,7 @@ class LLMGlobalEngine:
         if len(self.pending_requests) > 0:
             allocatable_requests = [x for x in self.pending_requests if x.arrive_at <= end_at]
             for req in allocatable_requests:
-                # print(f"T: {self.global_timer} Assigning request {req.req_id} @ {req.arrive_at} to engine")
-                self.policy.assign_requests(req)
+                self.global_waitlist.add_request(req)  # Add to global waitlist
                 self.pending_requests.remove(req)
 
     @property
