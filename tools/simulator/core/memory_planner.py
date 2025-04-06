@@ -111,7 +111,7 @@ class MemoryPlanner:
         if request.req_id not in self._allocation_map:
             # this is a new request
             num_required_blocks = math.ceil(request.input_length / self.block_size)
-            return self._max_num_blocks - self._allocated_blocks >= num_required_blocks
+            return self._max_num_blocks*0.95 - self._allocated_blocks >= num_required_blocks
         else:
             # at least one block is available
             return self._max_num_blocks - self._allocated_blocks >= 1

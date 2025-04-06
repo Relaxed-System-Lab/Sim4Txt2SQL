@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict
 from dataclasses import dataclass
 from typing import List, Optional
+from simulator.internal.configs.hardware_params import hardware_params
 
 class REQ_STATUS(enum.Enum):
     PENDING = 1
@@ -11,19 +12,97 @@ class REQ_STATUS(enum.Enum):
     GENERATE = 4
     EXIT = 5
 
-EMPIRICAL_TIME = {"Information Retriever": 1.65,
-                  "extract_keywords": 4.05, 
-                  "generate_candidate_llama-agent": 130.5,
-                  "revise": 80,
-                  "unit_tester": 1.94,
-                  "generate_unit_test": 32.82,
-                  "evaluate": 4.32}
+# For model parameters: Llama-3.1-70B-Instruct
+HIDDEN_SIZE = 8192
+NUM_LAYERS = 80
+B = 2
+
+EMPIRICAL_IO_LEN = {"Information Retriever": (306.25, 6.59),
+                  "extract_keywords": (656.71, 35.26), 
+                  "generate_candidate_llama-agent1": (12421.68, 536.06),
+                  "generate_candidate_llama-agent": (12421.68, 536.06),
+                  "revise": (8288.49, 136.54),
+                  "unit_tester": (274.67, 4.67),
+                  "generate_unit_test": (948.63, 93.83),
+                  "evaluate": (828.54, 30.59)}
+
+EMPIRICAL_TIME_A100 = {"Information Retriever": 0.1749,
+                  "extract_keywords": 1.1580, 
+                  "generate_candidate_llama-agent1": 14.4967,
+                  "generate_candidate_llama-agent": 14.4976,
+                  "revise": 3.6632,
+                  "unit_tester": 0.1660,
+                  "generate_unit_test": 2.1840,
+                  "evaluate": 1.0986}
+
+EMPIRICAL_TIME_H100 = {"Information Retriever": 0.0654,
+                        "extract_keywords": 0.5215, 
+                        "generate_candidate_llama-agent1": 6.1769,
+                        "generate_candidate_llama-agent": 6.1769,
+                        "revise": 1.1688,
+                        "unit_tester": 0.0644,
+                        "generate_unit_test": 1.0258,
+                        "evaluate": 0.4962}
+
+EMPIRICAL_TIME_L40 = {"Information Retriever": 0.2327,
+                        "extract_keywords": 1.8543, 
+                        "generate_candidate_llama-agent1": 23.0041,
+                        "generate_candidate_llama-agent": 23.0041,
+                        "revise": 4.9287,
+                        "unit_tester": 0.2289,
+                        "generate_unit_test": 3.7389,
+                        "evaluate": 1.8578}
+
+EMPIRICAL_TIME_A6000 = {"Information Retriever": 0.2617,
+                        "extract_keywords": 2.0861,
+                        "generate_candidate_llama-agent": 26.0255,
+                        "generate_candidate_llama-agent1": 26.0255,
+                        "revise": 5.6499,
+                        "unit_tester": 0.2575,
+                        "generate_unit_test": 4.2179,
+                        "evaluate": 2.1019}
+EMPIRICAL_TIME_A800 = {"Information Retriever": 0.1020,
+                        "extract_keywords": 0.7857,
+                        "generate_candidate_llama-agent": 10.2678,
+                        "revise": 2.4632,
+                        "unit_tester": 0.0970,
+                        "generate_unit_test": 1.6258,
+                        "evaluate": 0.8296}
+
+def calculate_empirical_time(hardware_name: str, step_name) -> float:
+    """Calculate the empirical time for a given hardware"""
+    # hardware_param = hardware_params[hardware_name]
+    # c_t = int(hardware_param["FP16"])
+    # m_t = int(hardware_param["bandwidth"])
+    # input_length, output_length = EMPIRICAL_IO_LEN[step_name]
+    # prefill = (24 * input_length * HIDDEN_SIZE**2 * NUM_LAYERS) / c_t
+    # decode = (12 * output_length * HIDDEN_SIZE**2 * NUM_LAYERS * B) / m_t
+    # empirical_time = prefill + decode
+    if hardware_name == "nvidia_A100":
+        empirical_time = EMPIRICAL_TIME_A100[step_name]
+    elif hardware_name == "nvidia_H100":
+        empirical_time = EMPIRICAL_TIME_H100[step_name]
+    elif hardware_name == "nvidia_L40":
+        empirical_time = EMPIRICAL_TIME_L40[step_name]
+    return empirical_time
+
+def calculate_avg_empirical_time(hardware_lst: List, step_name) -> float:
+    """Calculate the average empirical time for a given hardware list"""
+    total_time = 0
+    for hardware_name in hardware_lst:
+        total_time += calculate_empirical_time(hardware_name, step_name)
+    return total_time / len(hardware_lst)
+
 STANDARD_WORKFLOW = ["Information Retriever",
                      "extract_keywords",
                      "Information Retriever",
                      "Information Retriever",
                      "Information Retriever",
                      "generate_candidate_llama-agent",
+                     "revise",
+                     "revise",
+                     "revise",
+                     "revise",
                      "revise",
                      "unit_tester",
                      "generate_unit_test",
@@ -48,7 +127,6 @@ class GenerationRequest:
         self.prefill_finished_at = None
         self.generation_finished_at = None
 
-        self.empirical_time = EMPIRICAL_TIME[self.step]
         self.SLO = slo
         self.elapsed_time = 0
         self.urgency = 0
@@ -72,8 +150,9 @@ class GenerationRequest:
     def _stop(self):
         pass
 
-    def update_urgency(self):
-        self.urgency = -((self.SLO - self.elapsed_time) - self.empirical_time)
+    def update_urgency(self, hardware_name: str):
+        empirical_time = calculate_empirical_time(hardware_name, self.step)
+        self.urgency = -((self.SLO - self.elapsed_time) - empirical_time)
 
     def __str__(self):
         return f"Request {self.req_id} for model {self.model} with input length {self.input_length} and output length {self.output_length} arrived at {self.arrive_at}"
@@ -108,7 +187,7 @@ class Text2SQLRequest:
     stage_lst: List[str] = None
     request_counter: int = 0
     
-    def __init__(self, req_id: str, gen_requests_config: List[dict], slo=35.28):
+    def __init__(self, req_id: str, gen_requests_config: List[dict], slo=52.95, hardware_lst: List[str] = ["nvidia_A100"]):
         self.slo = slo
         self.req_id = req_id
         self.current_stage = 0
@@ -120,6 +199,7 @@ class Text2SQLRequest:
         self._initialize_stages()
         self.total_stages = len(self.stage_lst)
         self.standard_workflow = STANDARD_WORKFLOW
+        self.hardware_lst = hardware_lst
     
     def _initialize_stages(self):
         """Initialize the stages and maintain the order"""
@@ -139,24 +219,39 @@ class Text2SQLRequest:
     
     def create_current_stage_requests(self, model, arrive_at: float) -> List[Optional[GenerationRequest]]:
         """创建下一阶段的请求"""
+        # Set a flag to distinguish between the first generate_candidate_llama-agent and the second one
+        candidate_count = 0
         current_step = self.stage_lst[self.current_stage]
         if current_step in self.standard_workflow:
             self.standard_workflow.remove(current_step)
         if current_step == "unit_tester" and "revise" in self.standard_workflow:
-            self.standard_workflow.remove("revise")
+            self.standard_workflow = list(filter(lambda x: x != "revise", self.standard_workflow))
         if current_step == "generate_candidate_llama-agent" or current_step == "evaluate":
             for stage_config in self.gen_requests_config:
                 if stage_config["step"] == current_step:
-                    next_request = GenerationRequest(
-                        req_id=f"{self.req_id}_req_{self.request_counter}",
-                        model=model,
-                        step=current_step,
-                        slo=(self.SLO - self.total_time) * (EMPIRICAL_TIME[current_step] / (EMPIRICAL_TIME[current_step] + sum([EMPIRICAL_TIME[s] for s in self.standard_workflow]))),
-                        input_length=stage_config["input_length"],
-                        output_length=stage_config["output_length"],
-                        arrive_at=arrive_at,
-                        parent_request=self
-                    )
+                    if current_step == "generate_candidate_llama-agent" and candidate_count < 4:
+                        next_request = GenerationRequest(
+                            req_id=f"{self.req_id}_req_{self.request_counter}",
+                            model=model,
+                            step=current_step+'1',
+                            slo=(self.slo - self.total_time) * (calculate_avg_empirical_time(self.hardware_lst, current_step) / (calculate_avg_empirical_time(self.hardware_lst, current_step) + sum([calculate_avg_empirical_time(self.hardware_lst, s) for s in self.standard_workflow]))),
+                            input_length=stage_config["input_length"],
+                            output_length=stage_config["output_length"],
+                            arrive_at=arrive_at,
+                            parent_request=self
+                        )
+                        candidate_count += 1
+                    else:
+                        next_request = GenerationRequest(
+                            req_id=f"{self.req_id}_req_{self.request_counter}",
+                            model=model,
+                            step=current_step,
+                            slo=(self.slo - self.total_time) * (calculate_avg_empirical_time(self.hardware_lst, current_step) / (calculate_avg_empirical_time(self.hardware_lst, current_step) + sum([calculate_avg_empirical_time(self.hardware_lst, s) for s in self.standard_workflow]))),
+                            input_length=stage_config["input_length"],
+                            output_length=stage_config["output_length"],
+                            arrive_at=arrive_at,
+                            parent_request=self
+                        )
                     self.current_requests.append(next_request)
                     self.request_counter += 1
         else:
@@ -164,7 +259,7 @@ class Text2SQLRequest:
                 req_id=f"{self.req_id}_req_{self.request_counter}",
                 model=model,
                 step=current_step,
-                slo=(self.SLO - self.total_time) * (EMPIRICAL_TIME[current_step] / (EMPIRICAL_TIME[current_step] + sum([EMPIRICAL_TIME[s] for s in self.standard_workflow]))),
+                slo=(self.slo - self.total_time) * (calculate_avg_empirical_time(self.hardware_lst, current_step) / (calculate_avg_empirical_time(self.hardware_lst, current_step) + sum([calculate_avg_empirical_time(self.hardware_lst, s) for s in self.standard_workflow]))),
                 input_length=self.gen_requests_config[self.request_counter]["input_length"],
                 output_length=self.gen_requests_config[self.request_counter]["output_length"],
                 arrive_at=arrive_at,
@@ -176,6 +271,8 @@ class Text2SQLRequest:
         # next_request = GenerationRequest(
         #     req_id=f"{self.req_id}_req_{self.request_counter}",
         #     model=model,
+        #     step=current_step,
+        #     slo=0.0,
         #     input_length=self.gen_requests_config[self.request_counter]["input_length"],
         #     output_length=self.gen_requests_config[self.request_counter]["output_length"],
         #     arrive_at=arrive_at,

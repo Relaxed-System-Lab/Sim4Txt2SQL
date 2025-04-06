@@ -7,7 +7,7 @@ from .policies import EvenGTLPolicy
 import json
 import numpy as np
 from typing import Dict, List, Optional
-from simulator.core.request import Text2SQLRequest, GenerationRequest
+from simulator.core.request_copy import Text2SQLRequest, GenerationRequest
 from simulator.core.arrival import PoissonProcess
 
 
@@ -48,8 +48,8 @@ class LLMGlobalEngine:
         else:
             print("Arrival rate not provided, assuming all requests arrive at time 0")
             workload = [0] * len(data)        
-        # for idx, request_data in enumerate([data[0]]):
-        for idx, request_data in enumerate(data[:30]):
+        for idx, request_data in enumerate([data[1]]):
+        # for idx, request_data in enumerate(data[50:]):
             request_data["model"] = "meta-llama/Llama-3.1-70B-Instruct"
             text2sql_req = Text2SQLRequest(
                 req_id=f"text2sql_{idx}",
@@ -94,7 +94,7 @@ class LLMGlobalEngine:
 
     def start(self):
         print(f"Total requests: {self.total_requests}")
-        time_queue = {}
+        time_queue = set()
         while True:
             for model in self.supported_models:
                 for engine in self.engines[model]:

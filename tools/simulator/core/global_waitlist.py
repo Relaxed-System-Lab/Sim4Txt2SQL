@@ -19,8 +19,8 @@ class GlobalWaitlist:
     def remove_request(self, request: GenerationRequest):
         self.waitlist.remove(request)
 
-    def update_elapsed_time(self, current_time: float):
+    def update_elapsed_time(self, current_time: float, hardware_name: str):
         for request in self.waitlist:
             request.elapsed_time = current_time - request.arrive_at
-            request.update_urgency()
+            request.update_urgency(hardware_name)
 

@@ -56,6 +56,13 @@ class DeterministicProcess(ArrivalProcess):
     def cv(self):
         return 0
 
+    def generate_arrivals(self, start: float, duration: float, seed: int = 0):
+        np.random.seed(seed)
+        n_requests = int(duration * self.rate_)
+        interval = 1 / self.rate_
+        ticks = [start + i * interval for i in range(n_requests)]
+        return ticks
+
     def generate_workload(self, start: float, duration: float):
         n_requests = int(duration * self.rate_)
         interval = 1 / self.rate_

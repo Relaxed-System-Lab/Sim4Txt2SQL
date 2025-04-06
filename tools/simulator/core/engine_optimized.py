@@ -10,13 +10,14 @@ from .request import GenerationRequest
 from simulator.core.global_waitlist import GlobalWaitlist  # Import global waitlist
 
 
-TEMPLATE_TOKENS = {"Information Retriever": 10,
-                  "extract_keywords": 4.05, 
-                  "generate_candidate_llama-agent": 130.5,
-                  "revise": 80,
-                  "unit_tester": 1.94,
-                  "generate_unit_test": 32.82,
-                  "evaluate": 4.32}
+TEMPLATE_TOKENS = {"Information Retriever": 213,
+                  "extract_keywords": 630, 
+                  "generate_candidate_llama-agent1": 9158,
+                  "generate_candidate_llama-agent": 5292,
+                  "revise": 3059,
+                  "unit_tester": 213,
+                  "generate_unit_test": 436,
+                  "evaluate": 261}
 
 class LLMEngine:
     def __init__(self, w1, w2, engine_id, model_name, hardware_name, w_bit, a_bit, kv_bit):
@@ -55,20 +56,21 @@ class LLMEngine:
         if not waitlist:
             return None
         prior_request = waitlist[0]
-        highest_priority = prior_request.priority
+        highest_priority = float("-inf")
         for request in waitlist:
-            if request.step in {req.step for req in self.running}:
-                saved_prefill_result = self.analyzer.analyze(
-                    seqlen=TEMPLATE_TOKENS[request.step],
-                    batchsize=1,
-                    w_bit=self.w_bit,
-                    a_bit=self.a_bit,
-                    kv_bit=self.kv_bit,
-                )
-                saved_prefill_time = saved_prefill_result["total_results"]["prefill"]["inference_time"]
-            else:
-                saved_prefill_time = 0
-            priority = self.w1 * request.urgency + self.w2 * saved_prefill_time
+            # if request.step in {req.step for req in self.running} and self.w2 != 0:
+            #     saved_prefill_result = self.analyzer.analyze(
+            #         seqlen=TEMPLATE_TOKENS[request.step],
+            #         batchsize=1,
+            #         w_bit=self.w_bit,
+            #         a_bit=self.a_bit,
+            #         kv_bit=self.kv_bit,
+            #     )
+            #     saved_prefill_time = saved_prefill_result["total_results"]["prefill"]["inference_time"]
+            # else:
+            #     saved_prefill_time = 0
+            # priority = self.w1 * request.urgency + self.w2 * saved_prefill_time
+            priority = self.w1 * request.urgency
             if priority > highest_priority:
                 prior_request = request
                 highest_priority = priority
@@ -147,7 +149,7 @@ class LLMEngine:
     def step(self, start_at: float):
         handled_requests = []
         # Fetch the highest-priority request from the global waitlist
-        self.global_waitlist.update_elapsed_time(start_at)
+        self.global_waitlist.update_elapsed_time(start_at, self.hardware_name)
         next_request = self.get_highest_priority_request(self.global_waitlist.waitlist)
 
         if next_request:
