@@ -1,13 +1,12 @@
 from collections import deque, defaultdict
 from typing import List, Deque
 from simulator.core.engine import LLMEngine
-from simulator.core.request import GenerationRequest
+from simulator.core.request import Text2SQLRequest, GenerationRequest
 from dataclasses import dataclass
 from .policies import EvenGTLPolicy
 import json
 import numpy as np
 from typing import Dict, List, Optional
-from simulator.core.request_copy import Text2SQLRequest, GenerationRequest
 from simulator.core.arrival import PoissonProcess
 
 
@@ -48,8 +47,8 @@ class LLMGlobalEngine:
         else:
             print("Arrival rate not provided, assuming all requests arrive at time 0")
             workload = [0] * len(data)        
-        for idx, request_data in enumerate([data[1]]):
-        # for idx, request_data in enumerate(data[50:]):
+        # for idx, request_data in enumerate([data[1]]):
+        for idx, request_data in enumerate(data):
             request_data["model"] = "meta-llama/Llama-3.1-70B-Instruct"
             text2sql_req = Text2SQLRequest(
                 req_id=f"text2sql_{idx}",

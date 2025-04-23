@@ -10,9 +10,9 @@ hardware_params = {
     },
     # https://www.nvidia.com/content/PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf
     "nvidia_A6000": {
-        "bandwidth": 768e9,
-        "FP16": 309.677e12 / 2,
-        "INT8": 309.7e12,
+        "bandwidth": 960e9,
+        "FP16": 91e12,
+        "INT8": 182e12,
         "onchip_buffer": 21504e3,
         "vmemory": 48e9,  # 48GB in bytes
     },
@@ -53,7 +53,7 @@ hardware_params = {
         "onchip_buffer": 27648e3,
         "vmemory": 80e9,  # 80GB in bytes
     },
-    "nvidia_A40": {
+    "nvidia_A40S": {
         "bandwidth": 696e9,
         "FP16": 149.7e12,
         "INT8": 299.3e12,
@@ -82,7 +82,7 @@ hardware_params = {
     # },
     # https://images.nvidia.com/aem-dam/Solutions/Data-Center/l4/nvidia-ada-gpu-architecture-whitepaper-v2.1.pdf
     # Ada SM has 256 KB Register File, and 128 KB of L1/Shared Memory
-    "nvidia_L40": {
+    "nvidia_L40S": {
         "bandwidth": 864e9,
         "FP16": 181e12,
         "INT8": 362e12,

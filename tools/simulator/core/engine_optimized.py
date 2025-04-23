@@ -7,8 +7,8 @@ from simulator.internal.configs.hardware_params import hardware_params
 from typing import List, Deque, Optional
 
 from .request import GenerationRequest
-from simulator.core.global_waitlist import GlobalWaitlist  # Import global waitlist
-
+from .global_waitlist import GlobalWaitlist  # Import global waitlist
+from .obtain_latency import build_latency_dict
 
 TEMPLATE_TOKENS = {"Information Retriever": 213,
                   "extract_keywords": 630, 
@@ -20,9 +20,8 @@ TEMPLATE_TOKENS = {"Information Retriever": 213,
                   "evaluate": 261}
 
 class LLMEngine:
-    def __init__(self, w1, w2, engine_id, model_name, hardware_name, w_bit, a_bit, kv_bit):
+    def __init__(self, w1, engine_id, model_name, hardware_name, w_bit, a_bit, kv_bit):
         self.w1 = w1
-        self.w2 = w2
         self.engine_id = engine_id
         self.model_name = model_name
         self.hardware_name = hardware_name
@@ -36,6 +35,7 @@ class LLMEngine:
             source="huggingface",
         )
         self.global_waitlist = GlobalWaitlist.get_instance()
+        self.waiting: Deque[GenerationRequest] = deque()
         self.running: Deque[GenerationRequest] = deque()
         self.finished: List[GenerationRequest] = []
         self.memory_planner = MemoryPlanner(
@@ -46,11 +46,20 @@ class LLMEngine:
             kv_bit,
         )
         self.memory_planner.print_status()
+        self.latency_dict = build_latency_dict(hardware_name)
         self.finished_requests: int = 0
         self.configure()
 
     def configure(self):
         pass
+
+    def add_request(self, request: GenerationRequest):
+        self.waiting.append(request)
+
+    def update_elapsed_time(self, current_time: float, hardware_name: str):
+        for request in self.waiting:
+            request.elapsed_time = current_time - request.arrive_at
+            request.update_urgency(hardware_name)
 
     def get_highest_priority_request(self, waitlist) -> Optional[GenerationRequest]:
         if not waitlist:
@@ -75,6 +84,29 @@ class LLMEngine:
                 prior_request = request
                 highest_priority = priority
         if self.memory_planner.can_allocate_request(prior_request):
+            if prior_request != self.waiting[0]:
+                pq_arrive_at = prior_request.arrive_at
+                pq_slo = prior_request.SLO
+                pq_elapsed_time = prior_request.elapsed_time
+                pq_urgency = prior_request.urgency
+                pq_empirical_time = (pq_slo - pq_elapsed_time) + pq_urgency
+
+                fcfs_arrive_at = self.waiting[0].arrive_at
+                fcfs_slo = self.waiting[0].SLO
+                fcfs_elapsed_time = self.waiting[0].elapsed_time
+                fcfs_urgency = self.waiting[0].urgency
+                fcfs_empirical_time = (fcfs_slo - fcfs_elapsed_time) + fcfs_urgency
+                
+                print(f"pq_requestid: {prior_request.req_id}, fcfs_requestid: {self.waiting[0].req_id}")
+                print(f"pq_requeststep: {prior_request.step}, fcfs_requeststep: {self.waiting[0].step}")
+                print(f"pq_arrive_at: {pq_arrive_at}, fcfs_arrive_at: {fcfs_arrive_at}")
+                print(f"pq_slo: {pq_slo}, fcfs_slo: {fcfs_slo}")
+                print(f"pq_elapsed_time: {pq_elapsed_time}, fcfs_elapsed_time: {fcfs_elapsed_time}")
+                print(f"pq_empirical_time: {pq_empirical_time}, fcfs_empirical_time: {fcfs_empirical_time}")
+                print(f"pq_urgency: {pq_urgency}, fcfs_urgency: {fcfs_urgency}")
+                print("Request IDs in waiting queue:", [request.req_id for request in self.waiting])
+                print("Request arrive_at in waiting queue:", [request.arrive_at for request in self.waiting])
+                print("Request urgency in waiting queue:", [request.urgency for request in self.waiting])
             return prior_request
         return None
 
@@ -85,23 +117,25 @@ class LLMEngine:
             start_at = request.arrive_at
         self.running.append(request)
         request._prefill()
-        if request.step in {req.step for req in self.running}:
-            prefill_result = self.analyzer.analyze(
-                seqlen=request.input_length-TEMPLATE_TOKENS[request.step],
-                batchsize=1,
-                w_bit=self.w_bit,
-                a_bit=self.a_bit,
-                kv_bit=self.kv_bit,
-            )
-        else:
-            prefill_result = self.analyzer.analyze(
-                seqlen=request.input_length,
-                batchsize=1,
-                w_bit=self.w_bit,
-                a_bit=self.a_bit,
-                kv_bit=self.kv_bit,
-            )
-        prefill_time = prefill_result["total_results"]["prefill"]["inference_time"]
+        # if request.step in {req.step for req in self.running}:
+        #     prefill_result = self.analyzer.analyze(
+        #         seqlen=request.input_length-TEMPLATE_TOKENS[request.step],
+        #         batchsize=1,
+        #         w_bit=self.w_bit,
+        #         a_bit=self.a_bit,
+        #         kv_bit=self.kv_bit,
+        #     )
+        # else:
+
+        # prefill_result = self.analyzer.analyze(
+        #     seqlen=request.input_length,
+        #     batchsize=1,
+        #     w_bit=self.w_bit,
+        #     a_bit=self.a_bit,
+        #     kv_bit=self.kv_bit,
+        # )
+        # prefill_time = prefill_result["total_results"]["prefill"]["inference_time"]
+        prefill_time = self.latency_dict[(request.input_length, request.output_length)]["prefill_latency"]
         request.set_prefill_finished_at(start_at + prefill_time)
         if request.output_length == 1:
             request.set_generation_finished_at(start_at + prefill_time)
@@ -122,15 +156,18 @@ class LLMEngine:
         for req in executable_requests:
             if start_at < req.arrive_at:
                 start_at = req.arrive_at
-            decode_result = self.analyzer.analyze(
-                req.input_length + req.generated_tokens,
-                batchsize=max_batch_size,
-                w_bit=self.w_bit,
-                a_bit=self.a_bit,
-                kv_bit=self.kv_bit,
-            )
+            # decode_result = self.analyzer.analyze(
+            #     req.input_length + req.generated_tokens,
+            #     batchsize=max_batch_size,
+            #     w_bit=self.w_bit,
+            #     a_bit=self.a_bit,
+            #     kv_bit=self.kv_bit,
+            # )
+            # decode_time.append(
+            #     decode_result["total_results"]["decode"]["inference_time"]
+            # )
             decode_time.append(
-                decode_result["total_results"]["decode"]["inference_time"]
+                self.latency_dict[(req.input_length, req.output_length)]["per_token_decode_latency"]
             )
         finished_at = max(decode_time) + start_at
         finished_lst = []
@@ -149,11 +186,11 @@ class LLMEngine:
     def step(self, start_at: float):
         handled_requests = []
         # Fetch the highest-priority request from the global waitlist
-        self.global_waitlist.update_elapsed_time(start_at, self.hardware_name)
-        next_request = self.get_highest_priority_request(self.global_waitlist.waitlist)
+        self.update_elapsed_time(start_at, self.hardware_name)
+        next_request = self.get_highest_priority_request(self.waiting)
 
         if next_request:
-            self.global_waitlist.remove_request(next_request)
+            self.waiting.remove(next_request)
             handled_requests = [next_request.req_id]
             prefill_end_at, handled_requests, memory_event = self._prefill(
                 next_request, start_at
@@ -214,4 +251,4 @@ class LLMEngine:
 
     @property
     def empty(self):
-        return len(self.global_waitlist) == 0 and len(self.running) == 0
+        return len(self.waiting) == 0 and len(self.running) == 0

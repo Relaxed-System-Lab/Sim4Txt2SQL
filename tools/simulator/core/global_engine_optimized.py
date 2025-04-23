@@ -4,6 +4,7 @@ from simulator.core.engine_optimized import LLMEngine
 from simulator.core.request import GenerationRequest
 from dataclasses import dataclass
 from .policies import EvenGTLPolicy
+from .policies import WorkloadBalancePolicy
 import json
 import numpy as np
 from typing import Dict, List, Optional
@@ -14,7 +15,8 @@ from simulator.core.global_waitlist import GlobalWaitlist  # Import global waitl
 
 
 class OPGlobalEngine:
-    def __init__(self):
+    def __init__(self, alpha):
+        self.alpha = alpha
         self.hardware_lst = []
         self.engines = defaultdict(list[LLMEngine])
         self.timers = defaultdict(dict)
@@ -23,14 +25,14 @@ class OPGlobalEngine:
         self.supported_models: set = set()
         self._trace = []
         self.total_requests = 0
-        self.policy = EvenGTLPolicy()
+        self.policy = WorkloadBalancePolicy()
         self.text2sql_requests: Dict[str, Text2SQLRequest] = {}
         self.global_waitlist = GlobalWaitlist.get_instance()  # Initialize global waitlist
 
-    def add_engine(self, w1, w2, model_name, hardware_name, w_bit, a_bit, kv_bit):
+    def add_engine(self, w1, model_name, hardware_name, w_bit, a_bit, kv_bit):
         existing_engines = sum([len(x) for x in self.engines.values()])
         engine = LLMEngine(
-            w1, w2, existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
+            w1, existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
         )
         self.engines[model_name].append(engine)
         self.hardware_lst.append(hardware_name)
@@ -53,7 +55,8 @@ class OPGlobalEngine:
         else:
             print("Arrival rate not provided, assuming all requests arrive at time 0")
             workload = [0] * len(data)
-        for idx, request_data in enumerate(data[50:]):
+        # for idx, request_data in enumerate([data[1]]):
+        for idx, request_data in enumerate(data):
             request_data["model"] = "meta-llama/Llama-3.1-70B-Instruct"
             text2sql_req = Text2SQLRequest(
                 req_id=f"text2sql_{idx}",
@@ -126,14 +129,17 @@ class OPGlobalEngine:
                 end="\r",
             )
             if not self.has_remaining_requests():
+                # save the engine queue to a JSON file
+                # with open("engine_queues.json", "w") as f:
+                    # json.dump(self.policy.engine_queue, f, indent=4)
                 break
 
     def has_remaining_requests(self):
-        if self.pending_requests or self.global_waitlist.waitlist:
+        if self.pending_requests:
             return True
         for model in self.supported_models:
             for engine in self.engines[model]:
-                if len(engine.running) > 0:
+                if len(engine.waiting) > 0 or len(engine.running) > 0:
                     return True
         return False
 
@@ -141,7 +147,8 @@ class OPGlobalEngine:
         if len(self.pending_requests) > 0:
             allocatable_requests = [x for x in self.pending_requests if x.arrive_at <= end_at]
             for req in allocatable_requests:
-                self.global_waitlist.add_request(req)  # Add to global waitlist
+                # self.global_waitlist.add_request(req)  # Add to global waitlist
+                self.policy.assign_requests(req, self.alpha)
                 self.pending_requests.remove(req)
 
     @property

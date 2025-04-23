@@ -7,11 +7,11 @@ sys.path.append("../../")
 sys.path.append("../../../")
 from simulator.core.request import STANDARD_WORKFLOW, calculate_avg_empirical_time
 
-hardware_lst = ["nvidia_A100", "nvidia_A100", "nvidia_L40", "nvidia_L40", "nvidia_L40"]
-# SLO = sum([calculate_avg_empirical_time(hardware_lst, s) for s in STANDARD_WORKFLOW])
+hardware_lst = ["nvidia_A100", "nvidia_A100", "nvidia_A6000", "nvidia_L40S"]
+SLO = sum([calculate_avg_empirical_time(hardware_lst, s) for s in STANDARD_WORKFLOW])
 # print(f"SLO: {SLO}")
-SLO = 189.733
-SCALES = [round(x, 2) for x in [0.3 + 0.1 * i for i in range(60)]] # 0.3 to 3.2
+# SLO = 142.13
+SCALES = [round(x, 2) for x in [4 + 0.1 * i for i in range(60)]]  # 0.3 to 3.2
 
 def calculate_pass_rate(file_path, scale, num_requests=50):
     """
@@ -36,11 +36,11 @@ def main():
     files = [
         "./result/optimized_output0.json",
         "./result/optimized_output1.json",
-        # "./result/baseline_output.json"
+        "./result/baseline_output.json"
     ]
 
-    labels = ["Optimized Output 0", "Optimized Output 1"]#, "Baseline Output"]
-    colors = ["red", "green"]#, "blue"]  # Assign different colors for each label
+    labels = ["Optimized Output 0", "Optimized Output 1", "Baseline Output"]
+    colors = ["red", "green", "blue"]  # Assign different colors for each label
     all_pass_rates = []
 
     # Calculate pass rates for each file and scale
@@ -57,7 +57,7 @@ def main():
     for pass_rates, label, color in zip(all_pass_rates, labels, colors):
         plt.plot(SCALES, pass_rates, marker='o', label=label, color=color)
 
-    plt.title("Pass Rate vs SLO Scale for the First 25 Requests")
+    plt.title("Pass Rate vs SLO Scale for the Middle 50 Requests")
     plt.xlabel("SLO Scale")
     plt.ylabel("Pass Rate")
     plt.ylim(0, 1)

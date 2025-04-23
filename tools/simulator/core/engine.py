@@ -7,7 +7,7 @@ from simulator.internal.configs.hardware_params import hardware_params
 from typing import List, Deque
 
 from .request import GenerationRequest
-
+from .obtain_latency import build_latency_dict
 
 TEMPLATE_TOKENS = {"Information Retriever": 213,
                   "extract_keywords": 630, 
@@ -44,6 +44,7 @@ class LLMEngine:
             kv_bit,
         )
         self.memory_planner.print_status()
+        self.latency_dict = build_latency_dict(hardware_name)
         self.finished_requests: int = 0
         self.configure()
 
@@ -60,23 +61,24 @@ class LLMEngine:
             start_at = request.arrive_at
         self.running.append(request)
         request._prefill()        
-        if request.step in {req.step for req in self.running}:
-            prefill_result = self.analyzer.analyze(
-                seqlen=request.input_length-TEMPLATE_TOKENS[request.step],
-                batchsize=1,
-                w_bit=self.w_bit,
-                a_bit=self.a_bit,
-                kv_bit=self.kv_bit,
-            )
-        else:
-            prefill_result = self.analyzer.analyze(
-                seqlen=request.input_length,
-                batchsize=1,
-                w_bit=self.w_bit,
-                a_bit=self.a_bit,
-                kv_bit=self.kv_bit,
-            )
-        prefill_time = prefill_result["total_results"]["prefill"]["inference_time"]
+        # if request.step in {req.step for req in self.running}:
+        #     prefill_result = self.analyzer.analyze(
+        #         seqlen=request.input_length-TEMPLATE_TOKENS[request.step],
+        #         batchsize=1,
+        #         w_bit=self.w_bit,
+        #         a_bit=self.a_bit,
+        #         kv_bit=self.kv_bit,
+        #     )
+        # else:
+        # prefill_result = self.analyzer.analyze(
+        #     seqlen=request.input_length,
+        #     batchsize=1,
+        #     w_bit=self.w_bit,
+        #     a_bit=self.a_bit,
+        #     kv_bit=self.kv_bit,
+        # )
+        # prefill_time = prefill_result["total_results"]["prefill"]["inference_time"]
+        prefill_time = self.latency_dict[(request.input_length, request.output_length)]["prefill_latency"]
         request.set_prefill_finished_at(start_at + prefill_time)
         if request.output_length == 1:
             request.set_generation_finished_at(start_at + prefill_time)
@@ -97,15 +99,18 @@ class LLMEngine:
         for req in executable_requests:
             if start_at < req.arrive_at:
                 start_at = req.arrive_at
-            decode_result = self.analyzer.analyze(
-                req.input_length + req.generated_tokens,
-                batchsize=max_batch_size,
-                w_bit=self.w_bit,
-                a_bit=self.a_bit,
-                kv_bit=self.kv_bit,
-            )
+            # decode_result = self.analyzer.analyze(
+            #     req.input_length + req.generated_tokens,
+            #     batchsize=max_batch_size,
+            #     w_bit=self.w_bit,
+            #     a_bit=self.a_bit,
+            #     kv_bit=self.kv_bit,
+            # )
+            # decode_time.append(
+            #     decode_result["total_results"]["decode"]["inference_time"]
+            # )
             decode_time.append(
-                decode_result["total_results"]["decode"]["inference_time"]
+                self.latency_dict[(req.input_length, req.output_length)]["per_token_decode_latency"]
             )
         finished_at = max(decode_time) + start_at
         finished_lst = []

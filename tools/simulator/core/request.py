@@ -4,6 +4,7 @@ from typing import Dict
 from dataclasses import dataclass
 from typing import List, Optional
 from simulator.internal.configs.hardware_params import hardware_params
+from .obtain_latency import build_latency_dict
 
 class REQ_STATUS(enum.Enum):
     PENDING = 1
@@ -17,57 +18,77 @@ HIDDEN_SIZE = 8192
 NUM_LAYERS = 80
 B = 2
 
-EMPIRICAL_IO_LEN = {"Information Retriever": (306.25, 6.59),
-                  "extract_keywords": (656.71, 35.26), 
-                  "generate_candidate_llama-agent1": (12421.68, 536.06),
-                  "generate_candidate_llama-agent": (12421.68, 536.06),
-                  "revise": (8288.49, 136.54),
-                  "unit_tester": (274.67, 4.67),
-                  "generate_unit_test": (948.63, 93.83),
-                  "evaluate": (828.54, 30.59)}
+# EMPIRICAL_IO_LEN = {"Information Retriever": (306, 7),
+#                   "extract_keywords": (669, 44), 
+#                   "generate_candidate_llama-agent1": (10000, 680),
+#                   "generate_candidate_llama-agent": (10000, 680),
+#                   "revise": (5954, 82),
+#                   "unit_tester": (275, 5),
+#                   "generate_unit_test": (1110, 102),
+#                   "evaluate": (960, 29)}
+EMPIRICAL_IO_LEN = {"Information Retriever": (308, 5),
+                  "extract_keywords": (667, 45), 
+                  "generate_candidate_llama-agent1": (11748, 678),
+                  "generate_candidate_llama-agent": (11748, 678),
+                  "revise": (5963, 79),
+                  "unit_tester": (275, 4),
+                  "generate_unit_test": (1109, 103),
+                  "evaluate": (961, 22)}
 
-EMPIRICAL_TIME_A100 = {"Information Retriever": 0.1749,
-                  "extract_keywords": 1.1580, 
-                  "generate_candidate_llama-agent1": 14.4967,
-                  "generate_candidate_llama-agent": 14.4976,
-                  "revise": 3.6632,
-                  "unit_tester": 0.1660,
-                  "generate_unit_test": 2.1840,
-                  "evaluate": 1.0986}
-
-EMPIRICAL_TIME_H100 = {"Information Retriever": 0.0654,
-                        "extract_keywords": 0.5215, 
-                        "generate_candidate_llama-agent1": 6.1769,
-                        "generate_candidate_llama-agent": 6.1769,
-                        "revise": 1.1688,
-                        "unit_tester": 0.0644,
-                        "generate_unit_test": 1.0258,
-                        "evaluate": 0.4962}
-
-EMPIRICAL_TIME_L40 = {"Information Retriever": 0.2327,
-                        "extract_keywords": 1.8543, 
-                        "generate_candidate_llama-agent1": 23.0041,
-                        "generate_candidate_llama-agent": 23.0041,
-                        "revise": 4.9287,
-                        "unit_tester": 0.2289,
-                        "generate_unit_test": 3.7389,
-                        "evaluate": 1.8578}
-
-EMPIRICAL_TIME_A6000 = {"Information Retriever": 0.2617,
-                        "extract_keywords": 2.0861,
-                        "generate_candidate_llama-agent": 26.0255,
-                        "generate_candidate_llama-agent1": 26.0255,
-                        "revise": 5.6499,
-                        "unit_tester": 0.2575,
-                        "generate_unit_test": 4.2179,
-                        "evaluate": 2.1019}
+EMPIRICAL_TIME_A100 = {"Information Retriever": 0.2253,   # 0.2475
+                        "extract_keywords": 1.1359,      #1.8238
+                        "generate_candidate_llama-agent1": 18.2363,     #26.8
+                        "generate_candidate_llama-agent": 18.2363,
+                        "revise": 3.3314,        #3.1796
+                        "unit_tester": 0.1735,      #0.209
+                        "generate_unit_test": 2.5385,    #3.8955
+                        "evaluate": 0.8670}     #0.9992
+EMPIRICAL_TIME_H100 = {"Information Retriever": 0.1012,
+                        "extract_keywords": 0.5469, 
+                        "generate_candidate_llama-agent1": 8.7863,
+                        "generate_candidate_llama-agent": 8.7863,
+                        "revise": 1.4280,
+                        "unit_tester": 0.0763,
+                        "generate_unit_test": 1.2382,
+                        "evaluate": 0.3985}
+EMPIRICAL_TIME_A6000 = {"Information Retriever": 0.4869,     #0.3143
+                        "extract_keywords": 2.1088,     #2.67
+                        "generate_candidate_llama-agent1": 34.2747,    #41.32
+                        "generate_candidate_llama-agent": 34.2747,
+                        "revise": 8.0309,     #4.82
+                        "unit_tester": 0.3907,    #0.254
+                        "generate_unit_test": 4.5617,    #6.0753
+                        "evaluate": 1.7923}    #1.324
+EMPIRICAL_TIME_A40 = {"Information Retriever": 0.4932,
+                        "extract_keywords": 2.5157,
+                        "generate_candidate_llama-agent1": 40.3525,
+                        "generate_candidate_llama-agent": 40.3525,
+                        "revise": 13.8657,
+                        "unit_tester": 0.3786,
+                        "generate_unit_test": 5.6343,
+                        "evaluate": 1.9049}
+EMPIRICAL_TIME_L40 = {"Information Retriever": 0.4003,
+                        "extract_keywords": 2.0330, 
+                        "generate_candidate_llama-agent1": 32.6221,
+                        "generate_candidate_llama-agent": 32.6221,
+                        "revise": 5.8850,
+                        "unit_tester": 0.3077,
+                        "generate_unit_test": 4.5497,
+                        "evaluate": 1.5440}
 EMPIRICAL_TIME_A800 = {"Information Retriever": 0.1020,
                         "extract_keywords": 0.7857,
+                        "generate_candidate_llama-agent1": 10.2678,
                         "generate_candidate_llama-agent": 10.2678,
                         "revise": 2.4632,
                         "unit_tester": 0.0970,
                         "generate_unit_test": 1.6258,
                         "evaluate": 0.8296}
+
+LATENCY_DICT_LOOKUP = {
+    "nvidia_A100": build_latency_dict("nvidia_A100"),
+    "nvidia_A6000": build_latency_dict("nvidia_A6000"),
+    "nvidia_L40S": build_latency_dict("nvidia_L40S")}
+
 
 def calculate_empirical_time(hardware_name: str, step_name) -> float:
     """Calculate the empirical time for a given hardware"""
@@ -78,12 +99,10 @@ def calculate_empirical_time(hardware_name: str, step_name) -> float:
     # prefill = (24 * input_length * HIDDEN_SIZE**2 * NUM_LAYERS) / c_t
     # decode = (12 * output_length * HIDDEN_SIZE**2 * NUM_LAYERS * B) / m_t
     # empirical_time = prefill + decode
-    if hardware_name == "nvidia_A100":
-        empirical_time = EMPIRICAL_TIME_A100[step_name]
-    elif hardware_name == "nvidia_H100":
-        empirical_time = EMPIRICAL_TIME_H100[step_name]
-    elif hardware_name == "nvidia_L40":
-        empirical_time = EMPIRICAL_TIME_L40[step_name]
+    latency_dict = LATENCY_DICT_LOOKUP[hardware_name]
+    empirical_time = latency_dict[EMPIRICAL_IO_LEN[step_name]]["latency"]
+    # if hardware_name == "nvidia_A100":
+    #     empirical_time = EMPIRICAL_TIME_A100[step_name]
     return empirical_time
 
 def calculate_avg_empirical_time(hardware_lst: List, step_name) -> float:
@@ -99,7 +118,6 @@ STANDARD_WORKFLOW = ["Information Retriever",
                      "Information Retriever",
                      "Information Retriever",
                      "generate_candidate_llama-agent",
-                     "revise",
                      "revise",
                      "revise",
                      "revise",
