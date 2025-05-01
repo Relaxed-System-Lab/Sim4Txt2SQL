@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict
 from simulator.core.global_engine import LLMGlobalEngine
 from simulator.core.global_engine_optimized import OPGlobalEngine
+from simulator.core.global_engine_ablation import ABGlobalEngine
 from simulator.core.utils import load_trace
 from simulator.ui import make_table
 from rich.console import Console
@@ -18,30 +19,27 @@ console = Console()
 
 def run_simulation(args):
     # print(args)
-    server = LLMGlobalEngine(args.input, float(args.arrival_rate))
+    # server = LLMGlobalEngine(args.input, float(args.arrival_rate))
+    server = ABGlobalEngine()
 
     for i in range(args.n_engines):
         server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
         # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
         server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A6000", 4,4,4)
         # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_L40S", 4,4,4)
-        # for j in range(9):
-            # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A40", 4,4,4)
-        # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
-        # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_L40", 4,4,4)
-        # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_L40", 4,4,4)
-        # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_L40", 4,4,4)
-        # server.add_engine("meta-llama/Llama-2-7b-hf", "nvidia_A100", 4,4,4)
-
+    
+    server.load_requests(args.input, float(args.arrival_rate), args.SLO)
+    
     server.start()
-    server.save_results("./result/baseline_output.json")
+    # server.save_results("./result/baseline_output.json")
+    server.save_results("./result/rr+pq_output.json")
 
     with open(args.trace_output, "w") as f:
         data = {"traceEvents": [asdict(x) for x in server.trace]}
         f.write(json.dumps(data, indent=4))
     stats = {
         "summary": server.requests_stats,
-        "failed": server.failed_requests,
+        # "failed": server.failed_requests,
         "config": server.config,
     }
     with open(args.stats_output, "w") as f:
@@ -100,15 +98,15 @@ def run_simulation_optimized(args, w1=1, index=0):
 
 if __name__ == "__main__":
     import argparse
-    hardware_lst = ["nvidia_A100", "nvidia_A100", "nvidia_A6000", "nvidia_L40S"]
-    # hardware_lst = ["nvidia_A100", "nvidia_A6000"]
+    # hardware_lst = ["nvidia_A100", "nvidia_A100", "nvidia_A6000", "nvidia_L40S"]
+    hardware_lst = ["nvidia_A100", "nvidia_A6000"]
     slo = sum([calculate_avg_empirical_time(hardware_lst, s) for s in STANDARD_WORKFLOW])
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file")
     parser.add_argument("--n-engines", type=int, help="Number of engines")
     parser.add_argument("--arrival-rate", help="Arrival rate", default=None)
     parser.add_argument("--SLO", help="Text2SQL Request SLO", default=slo)
-    parser.add_argument("--alpha", type=float, help="Alpha value for the optimized engine", default=0.4)
+    parser.add_argument("--alpha", type=float, help="Alpha value for the optimized engine", default=0.0)
 
     parser.add_argument(
         "--trace-output",
@@ -124,14 +122,14 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     slo_scales = [round(x, 2) for x in [3 + 0.2 * i for i in range(60)]]  # 0.3 to 3.2
-    # pass_rates_baseline = run_simulation(args)
-    # pass_rates_balance = run_simulation_optimized(args, 0, 0)
-    pass_rates_optimized = run_simulation_optimized(args, 1, 1)
+    pass_rates_rrpq = run_simulation(args)
+    # pass_rates_wbfcfs = run_simulation_optimized(args, 0, 0)
+    # pass_rates_wbpq = run_simulation_optimized(args, 1, 1)
     # # Plotting the pass rates for both baseline and optimized
     # plt.figure(figsize=(10, 6))
-    # plt.plot(slo_scales, pass_rates_baseline, marker='o', label="Baseline SLO Pass Rate", color='blue')
-    # plt.plot(slo_scales, pass_rates_optimized, marker='o', label="Optimized SLO Pass Rate", color='green')
-    # plt.plot(slo_scales, pass_rates_balance, marker='o', label="Workload-Balanced SLO Pass Rate", color='red')
+    # plt.plot(slo_scales, pass_rates_rrpq, marker='o', label="RR+PQ SLO Pass Rate", color='blue')
+    # plt.plot(slo_scales, pass_rates_wbfcfs, marker='o', label="WB+FCFS SLO Pass Rate", color='red')
+    # plt.plot(slo_scales, pass_rates_wbpq, marker='o', label="WB+PQ SLO Pass Rate", color='green')
     # plt.title(f"SLO Pass Rate vs SLO Scale")
     # plt.xlabel("SLO Scale")
     # plt.ylabel("Pass Rate")

@@ -64,7 +64,7 @@ class LLMEngine:
     def get_highest_priority_request(self, waitlist) -> Optional[GenerationRequest]:
         if not waitlist:
             return None
-        prior_request = waitlist[0]
+        wanted_request = waitlist[0]
         highest_priority = float("-inf")
         for request in waitlist:
             # if request.step in {req.step for req in self.running} and self.w2 != 0:
@@ -81,33 +81,33 @@ class LLMEngine:
             # priority = self.w1 * request.urgency + self.w2 * saved_prefill_time
             priority = self.w1 * request.urgency
             if priority > highest_priority:
-                prior_request = request
+                wanted_request = request
                 highest_priority = priority
-        if self.memory_planner.can_allocate_request(prior_request):
-            if prior_request != self.waiting[0]:
-                pq_arrive_at = prior_request.arrive_at
-                pq_slo = prior_request.SLO
-                pq_elapsed_time = prior_request.elapsed_time
-                pq_urgency = prior_request.urgency
-                pq_empirical_time = (pq_slo - pq_elapsed_time) + pq_urgency
+        if self.memory_planner.can_allocate_request(wanted_request):
+            # if wanted_request != self.waiting[0]:
+                # pq_arrive_at = wanted_request.arrive_at
+                # pq_slo = wanted_request.SLO
+                # pq_elapsed_time = wanted_request.elapsed_time
+                # pq_urgency = wanted_request.urgency
+                # pq_empirical_time = (pq_slo - pq_elapsed_time) + pq_urgency
 
-                fcfs_arrive_at = self.waiting[0].arrive_at
-                fcfs_slo = self.waiting[0].SLO
-                fcfs_elapsed_time = self.waiting[0].elapsed_time
-                fcfs_urgency = self.waiting[0].urgency
-                fcfs_empirical_time = (fcfs_slo - fcfs_elapsed_time) + fcfs_urgency
+                # fcfs_arrive_at = self.waiting[0].arrive_at
+                # fcfs_slo = self.waiting[0].SLO
+                # fcfs_elapsed_time = self.waiting[0].elapsed_time
+                # fcfs_urgency = self.waiting[0].urgency
+                # fcfs_empirical_time = (fcfs_slo - fcfs_elapsed_time) + fcfs_urgency
                 
-                print(f"pq_requestid: {prior_request.req_id}, fcfs_requestid: {self.waiting[0].req_id}")
-                print(f"pq_requeststep: {prior_request.step}, fcfs_requeststep: {self.waiting[0].step}")
-                print(f"pq_arrive_at: {pq_arrive_at}, fcfs_arrive_at: {fcfs_arrive_at}")
-                print(f"pq_slo: {pq_slo}, fcfs_slo: {fcfs_slo}")
-                print(f"pq_elapsed_time: {pq_elapsed_time}, fcfs_elapsed_time: {fcfs_elapsed_time}")
-                print(f"pq_empirical_time: {pq_empirical_time}, fcfs_empirical_time: {fcfs_empirical_time}")
-                print(f"pq_urgency: {pq_urgency}, fcfs_urgency: {fcfs_urgency}")
-                print("Request IDs in waiting queue:", [request.req_id for request in self.waiting])
-                print("Request arrive_at in waiting queue:", [request.arrive_at for request in self.waiting])
-                print("Request urgency in waiting queue:", [request.urgency for request in self.waiting])
-            return prior_request
+                # print(f"pq_requestid: {wanted_request.req_id}, fcfs_requestid: {self.waiting[0].req_id}")
+                # print(f"pq_requeststep: {wanted_request.step}, fcfs_requeststep: {self.waiting[0].step}")
+                # print(f"pq_arrive_at: {pq_arrive_at}, fcfs_arrive_at: {fcfs_arrive_at}")
+                # print(f"pq_slo: {pq_slo}, fcfs_slo: {fcfs_slo}")
+                # print(f"pq_elapsed_time: {pq_elapsed_time}, fcfs_elapsed_time: {fcfs_elapsed_time}")
+                # print(f"pq_empirical_time: {pq_empirical_time}, fcfs_empirical_time: {fcfs_empirical_time}")
+                # print(f"pq_urgency: {pq_urgency}, fcfs_urgency: {fcfs_urgency}")
+                # print("Request IDs in waiting queue:", [request.req_id for request in self.waiting])
+                # print("Request arrive_at in waiting queue:", [request.arrive_at for request in self.waiting])
+                # print("Request urgency in waiting queue:", [request.urgency for request in self.waiting])
+            return wanted_request
         return None
 
     def _prefill(self, request: GenerationRequest, start_at: float):
