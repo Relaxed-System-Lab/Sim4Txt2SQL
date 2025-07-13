@@ -17,22 +17,30 @@ from simulator.core.request import STANDARD_WORKFLOW, calculate_avg_empirical_ti
 
 console = Console()
 
-def run_simulation(args):
+def run_simulation(args, w1=1):
     # print(args)
     # server = LLMGlobalEngine(args.input, float(args.arrival_rate))
-    server = ABGlobalEngine()
+    # server = ABGlobalEngine()
+    server = OPGlobalEngine(alpha=args.alpha, mode="vtc")
 
     for i in range(args.n_engines):
-        server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
+        server.add_engine(w1, "meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
+        # server.add_engine(w1, "meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
+        # server.add_engine(w1, "meta-llama/Llama-3.1-70B-Instruct", "nvidia_A6000", 4,4,4)
+        # server.add_engine(w1, "meta-llama/Llama-3.1-70B-Instruct", "nvidia_L40S", 4,4,4)
         # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
-        server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A6000", 4,4,4)
+        # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
+        # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_A6000", 4,4,4)
         # server.add_engine("meta-llama/Llama-3.1-70B-Instruct", "nvidia_L40S", 4,4,4)
     
     server.load_requests(args.input, float(args.arrival_rate), args.SLO)
     
     server.start()
     # server.save_results("./result/baseline_output.json")
-    server.save_results("./result/rr+pq_output.json")
+    # server.save_results("./result/rr+pq_output.json")
+    server.save_results("./result/vtc_output.json")
+    # server.save_results("./result/qlm_output.json")
+    # server.save_results("./result/sjf_output.json")
 
     with open(args.trace_output, "w") as f:
         data = {"traceEvents": [asdict(x) for x in server.trace]}
@@ -56,7 +64,7 @@ def run_simulation(args):
 
 def run_simulation_optimized(args, w1=1, index=0):
     # print(args)
-    server = OPGlobalEngine(alpha=args.alpha)
+    server = OPGlobalEngine(alpha=args.alpha, mode="hexflow")
 
     for i in range(args.n_engines):
         server.add_engine(w1, "meta-llama/Llama-3.1-70B-Instruct", "nvidia_A100", 4,4,4)
@@ -99,7 +107,8 @@ def run_simulation_optimized(args, w1=1, index=0):
 if __name__ == "__main__":
     import argparse
     # hardware_lst = ["nvidia_A100", "nvidia_A100", "nvidia_A6000", "nvidia_L40S"]
-    hardware_lst = ["nvidia_A100", "nvidia_A6000"]
+    # hardware_lst = ["nvidia_A100", "nvidia_A6000"]
+    hardware_lst = ["nvidia_A100"]
     slo = sum([calculate_avg_empirical_time(hardware_lst, s) for s in STANDARD_WORKFLOW])
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file")
@@ -122,12 +131,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     slo_scales = [round(x, 2) for x in [3 + 0.2 * i for i in range(60)]]  # 0.3 to 3.2
-    pass_rates_rrpq = run_simulation(args)
+    # pass_rates_rrpq = run_simulation(args)
+    # pass_rates_vtc = run_simulation(args)
+    pass_rate_qlm = run_simulation(args)
     # pass_rates_wbfcfs = run_simulation_optimized(args, 0, 0)
     # pass_rates_wbpq = run_simulation_optimized(args, 1, 1)
     # # Plotting the pass rates for both baseline and optimized
     # plt.figure(figsize=(10, 6))
-    # plt.plot(slo_scales, pass_rates_rrpq, marker='o', label="RR+PQ SLO Pass Rate", color='blue')
+    # # plt.plot(slo_scales, pass_rates_rrpq, marker='o', label="RR+PQ SLO Pass Rate", color='blue')
+    # plt.plot(slo_scales, pass_rates_vtc, marker='o', label=" VTC SLO Pass Rate", color='blue')
     # plt.plot(slo_scales, pass_rates_wbfcfs, marker='o', label="WB+FCFS SLO Pass Rate", color='red')
     # plt.plot(slo_scales, pass_rates_wbpq, marker='o', label="WB+PQ SLO Pass Rate", color='green')
     # plt.title(f"SLO Pass Rate vs SLO Scale")

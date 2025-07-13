@@ -1,6 +1,9 @@
 from collections import deque, defaultdict
 from typing import List, Deque
 from simulator.core.engine_optimized import LLMEngine
+from simulator.core.engine_vtc import LLMEngineVTC
+from simulator.core.engine_qlm import LLMEngineQLM
+from simulator.core.engine_sjf import LLMEngineSJF
 from simulator.core.request import GenerationRequest
 from dataclasses import dataclass
 from .policies import EvenGTLPolicy
@@ -15,10 +18,18 @@ from simulator.core.global_waitlist import GlobalWaitlist  # Import global waitl
 
 
 class OPGlobalEngine:
-    def __init__(self, alpha):
+    def __init__(self, alpha, mode):
         self.alpha = alpha
         self.hardware_lst = []
-        self.engines = defaultdict(list[LLMEngine])
+        if mode == "hexflow":
+            self.engines = defaultdict(list[LLMEngine])
+        elif mode == "vtc":
+            self.engines = defaultdict(list[LLMEngineVTC])
+        elif mode == "qlm":
+            self.engines = defaultdict(list[LLMEngineQLM])
+        elif mode == "sjf":
+            self.engines = defaultdict(list[LLMEngineSJF])
+        self.mode = mode
         self.timers = defaultdict(dict)
         self.pending_requests: Deque[GenerationRequest] = deque()
         self.global_timer = 0
@@ -27,13 +38,27 @@ class OPGlobalEngine:
         self.total_requests = 0
         self.policy = WorkloadBalancePolicy()
         self.text2sql_requests: Dict[str, Text2SQLRequest] = {}
+        self.served = {}
         self.global_waitlist = GlobalWaitlist.get_instance()  # Initialize global waitlist
 
     def add_engine(self, w1, model_name, hardware_name, w_bit, a_bit, kv_bit):
         existing_engines = sum([len(x) for x in self.engines.values()])
-        engine = LLMEngine(
-            w1, existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
-        )
+        if self.mode == "hexflow":
+            engine = LLMEngine(
+                w1, existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
+            )
+        elif self.mode == "vtc":
+            engine = LLMEngineVTC(
+                existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
+            )
+        elif self.mode == "qlm":
+            engine = LLMEngineQLM(
+                existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
+            )
+        elif self.mode == "sjf":
+            engine = LLMEngineSJF(
+                existing_engines + 1, model_name, hardware_name, w_bit, a_bit, kv_bit
+            )
         self.engines[model_name].append(engine)
         self.hardware_lst.append(hardware_name)
         self.supported_models.add(model_name)

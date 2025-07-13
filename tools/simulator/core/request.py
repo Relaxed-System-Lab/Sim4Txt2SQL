@@ -147,6 +147,7 @@ class GenerationRequest:
 
         self.SLO = slo
         self.elapsed_time = 0
+        self.time_left = slo
         self.urgency = 0
 
     def set_generation_finished_at(self, finished_at: float):
@@ -168,8 +169,12 @@ class GenerationRequest:
     def _stop(self):
         pass
 
+    def calculate_empirical_time(self, hardware_name: str) -> float:
+        """Calculate the empirical time for the request based on the hardware"""
+        return calculate_empirical_time(hardware_name, self.step)
+
     def update_urgency(self, hardware_name: str):
-        empirical_time = calculate_empirical_time(hardware_name, self.step)
+        empirical_time = self.calculate_empirical_time(hardware_name)
         self.urgency = -((self.SLO - self.elapsed_time) - empirical_time)
 
     def __str__(self):
