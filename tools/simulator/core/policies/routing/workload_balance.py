@@ -1,6 +1,6 @@
 from ._base import BaseGlobalToLocalPolicy
 from simulator.core.request import GenerationRequest, calculate_empirical_time
-from simulator.core.engine_optimized import LLMEngine
+from simulator.core.engine_optimized import LLMEngineOptimized
 from typing import Dict, List
 import itertools
 import json
@@ -30,7 +30,7 @@ class WorkloadBalancePolicy(BaseGlobalToLocalPolicy):
         self.baseline_engine = None
         self.engine_queue = {}
 
-    def prepare(self, engines: Dict[str, List[LLMEngine]]):
+    def prepare(self, engines: Dict[str, List[LLMEngineOptimized]]):
         self.engines = engines
         for model, engine_list in engines.items():
             for engine in engine_list:

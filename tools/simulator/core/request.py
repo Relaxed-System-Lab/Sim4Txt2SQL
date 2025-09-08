@@ -35,6 +35,10 @@ EMPIRICAL_IO_LEN = {"Information Retriever": (308, 5),
                   "generate_unit_test": (1109, 103),
                   "evaluate": (961, 22)}
 
+EMPIRICAL_IO_LEN_NEW = {"Selector": (2954, 112),
+                        "Decomposer": (2302, 135),
+                        "Refiner": (1729, 555)}
+
 EMPIRICAL_TIME_A100 = {"Information Retriever": 0.2253,   # 0.2475
                         "extract_keywords": 1.1359,      #1.8238
                         "generate_candidate_llama-agent1": 18.2363,     #26.8
@@ -112,6 +116,16 @@ def calculate_avg_empirical_time(hardware_lst: List, step_name) -> float:
         total_time += calculate_empirical_time(hardware_name, step_name)
     return total_time / len(hardware_lst)
 
+def calculate_tenant_slo(hardware_lst: List, tenant_id: int) -> float:
+    """Calculate SLO for a specific tenant based on empirical times"""
+    base_slo = sum([calculate_avg_empirical_time(hardware_lst, s) for s in STANDARD_WORKFLOW])
+    if tenant_id == 0:
+        # Tenant 1: Use 2.0x the base SLO
+        return base_slo * 2.0
+    else:
+        # Tenant 2: Use base SLO (sum of empirical times)
+        return base_slo
+
 STANDARD_WORKFLOW = ["Information Retriever",
                      "extract_keywords",
                      "Information Retriever",
@@ -127,6 +141,10 @@ STANDARD_WORKFLOW = ["Information Retriever",
                      "unit_tester",
                      "evaluate",
                      "unit_tester"]
+
+STANDARD_WORKFLOW_NEW = ["Selector",
+                         "Decomposer",
+                         "Refiner"]
 
 class GenerationRequest:
     def __init__(self, req_id: str, model: str, step: str, slo: float, input_length: int, output_length: int, 
@@ -209,8 +227,9 @@ class Text2SQLRequest:
     current_requests: Optional[GenerationRequest] = None
     stage_lst: List[str] = None
     request_counter: int = 0
+    tenant_id: int = 0  # 0 for tenant 1, 1 for tenant 2
     
-    def __init__(self, req_id: str, gen_requests_config: List[dict], slo=52.95, hardware_lst: List[str] = ["nvidia_A100"]):
+    def __init__(self, req_id: str, gen_requests_config: List[dict], slo=52.95, hardware_lst: List[str] = ["nvidia_A100"], tenant_id: int = 0):
         self.slo = slo
         self.req_id = req_id
         self.current_stage = 0
@@ -219,9 +238,10 @@ class Text2SQLRequest:
         self.total_time = 0.0
         self.current_requests = []
         self.request_counter = 0
+        self.tenant_id = tenant_id
         self._initialize_stages()
         self.total_stages = len(self.stage_lst)
-        self.standard_workflow = STANDARD_WORKFLOW
+        self.standard_workflow = STANDARD_WORKFLOW.copy()
         self.hardware_lst = hardware_lst
     
     def _initialize_stages(self):

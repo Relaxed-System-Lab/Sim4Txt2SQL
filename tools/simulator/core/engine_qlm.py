@@ -17,7 +17,7 @@ from simulator.core.request import STANDARD_WORKFLOW, calculate_avg_empirical_ti
 
 hardware_lst = ["nvidia_A100", "nvidia_A100", "nvidia_A6000", "nvidia_L40S"]
 # Calculate the average instead of the sum
-SLO = sum([calculate_avg_empirical_time(hardware_lst, s) for s in STANDARD_WORKFLOW]) / len(STANDARD_WORKFLOW)
+# SLO = sum([calculate_avg_empirical_time(hardware_lst, s) for s in STANDARD_WORKFLOW]) / len(STANDARD_WORKFLOW)
 
 class Group:
     """
@@ -102,12 +102,16 @@ class LLMEngineQLM:
 
     def _update_all_slos(self):
         """
-        Updates the SLOs for all requests in the virtual queues based on current time.
+        Updates the SLOs for all requests and their groups based on current time.
         :param vqs: The list of virtual queues.
         """
         for group in self.waiting.groups:
+            min_time_left = float('inf')
             for request in group.requests:
-                request.time_left = (SLO - request.elapsed_time) // 10 * 10
+                slo = request.parent_request.slo / len(STANDARD_WORKFLOW)
+                request.time_left = (slo - request.elapsed_time) // 10 * 10
+                min_time_left = min(min_time_left, request.time_left)
+            group.time_left = min_time_left  # Update group's time_left to match its most urgent request
 
     def check_violation(self):
         """
@@ -137,21 +141,29 @@ class LLMEngineQLM:
         self.waiting.groups = deque(groups)
 
     def add_request(self, request: GenerationRequest):
-        # 计算分组的time_left
-        group_time_left = (SLO - request.elapsed_time) // 10 * 10
-        request.time_left = group_time_left
-        # 查找是否有对应group
+        # Calculate request's time_left
+        slo = request.parent_request.slo / len(STANDARD_WORKFLOW)
+        request.time_left = (slo - request.elapsed_time) // 10 * 10
+        
+        # Find group with matching model and similar time_left
         target_group = None
         for group in self.waiting.groups:
-            if group.time_left == group_time_left and group.model == request.model:
-                target_group = group
-                break
+            if group.model == request.model:
+                # Add to group if time_left is within same bucket (rounded to nearest 10)
+                if (group.time_left // 10) == (request.time_left // 10):
+                    target_group = group
+                    break
+                    
         if target_group is None:
-            # 新建group并加入virtual queue
-            target_group = Group(request.model, group_time_left)
+            # Create new group if no matching group found
+            target_group = Group(request.model, request.time_left)
             self.waiting.add_group(target_group)
+            
+        # Insert request into group's deque (deque maintains FIFO order automatically)
         target_group.add_request(request)
-        # 检查violation并排序
+        target_group.time_left = min(target_group.time_left, request.time_left)
+        
+        # Check violation and reorder groups if needed
         if self.check_violation():
             self._reorder_edf()
 
@@ -162,6 +174,9 @@ class LLMEngineQLM:
                 request.update_urgency(hardware_name)
 
     def get_highest_priority_request(self, waitlist) -> Optional[GenerationRequest]:
+        # 检查violation并排序
+        if self.check_violation():
+            self._reorder_edf()
         # 不再使用priority，直接取第一个group的第一个request
         if not waitlist.groups or not waitlist.groups[0].requests:
             return None

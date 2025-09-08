@@ -19,7 +19,7 @@ TEMPLATE_TOKENS = {"Information Retriever": 213,
                   "generate_unit_test": 436,
                   "evaluate": 261}
 
-class LLMEngine:
+class LLMEngineOptimized:
     def __init__(self, w1, engine_id, model_name, hardware_name, w_bit, a_bit, kv_bit):
         self.w1 = w1
         self.engine_id = engine_id
@@ -79,6 +79,8 @@ class LLMEngine:
             # else:
             #     saved_prefill_time = 0
             # priority = self.w1 * request.urgency + self.w2 * saved_prefill_time
+            if self.w1 == 0:
+                break  # If w1 is 0, do not prioritize based on urgency
             priority = self.w1 * request.urgency
             if priority > highest_priority:
                 wanted_request = request
