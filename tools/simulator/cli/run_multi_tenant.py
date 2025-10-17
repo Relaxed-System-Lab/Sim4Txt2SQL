@@ -4,14 +4,14 @@ import subprocess
 from pathlib import Path
 
 # Settings with their optimal alpha values
-SETTINGS = [
-    {"input": "input_file_trace1.json", "n_engines": 2, "arrival_rate": 0.5, "alpha": 0.1},
-    {"input": "input_file_trace1.json", "n_engines": 2, "arrival_rate": 1.0, "alpha": 0.0},
-    {"input": "input_file_trace2.json", "n_engines": 2, "arrival_rate": 0.5, "alpha": 0.2},
-    {"input": "input_file_trace2.json", "n_engines": 2, "arrival_rate": 1.0, "alpha": 0.0},
-    {"input": "input_file_trace3.json", "n_engines": 2, "arrival_rate": 0.5, "alpha": 0.2},
-    {"input": "input_file_trace3.json", "n_engines": 2, "arrival_rate": 1.0, "alpha": 0.0},
-]
+# SETTINGS = [
+#     {"input": "input_file_trace1.json", "n_engines": 2, "arrival_rate": 0.5, "alpha": 0.1},
+#     {"input": "input_file_trace1.json", "n_engines": 2, "arrival_rate": 1.0, "alpha": 0.0},
+#     {"input": "input_file_trace2.json", "n_engines": 2, "arrival_rate": 0.5, "alpha": 0.2},
+#     {"input": "input_file_trace2.json", "n_engines": 2, "arrival_rate": 1.0, "alpha": 0.0},
+#     {"input": "input_file_trace3.json", "n_engines": 2, "arrival_rate": 0.5, "alpha": 0.2},
+#     {"input": "input_file_trace3.json", "n_engines": 2, "arrival_rate": 1.0, "alpha": 0.0},
+# ]
 # SETTINGS = [
 #     {"input": "input_file_trace1.json", "n_engines": 1, "arrival_rate": 0.5, "alpha": 0.1},
 #     {"input": "input_file_trace1.json", "n_engines": 1, "arrival_rate": 1.0, "alpha": 0.0},
@@ -20,6 +20,11 @@ SETTINGS = [
 #     {"input": "input_file_trace3.json", "n_engines": 1, "arrival_rate": 0.5, "alpha": 0.4},
 #     {"input": "input_file_trace3.json", "n_engines": 1, "arrival_rate": 1.0, "alpha": 0.0},
 # ]
+SETTINGS = [
+    {"input": "input_file_trace4_modified2.json", "n_engines": 1, "arrival_rate": 2.5, "alpha": 0.3},
+    {"input": "input_file_trace4_modified2.json", "n_engines": 1, "arrival_rate": 2.5, "alpha": 0.4},
+    {"input": "input_file_trace4_modified2.json", "n_engines": 1, "arrival_rate": 5.0, "alpha": 0.2},
+]
 
 # Create main results directory
 BASE_DIR = Path("./multi_tenant_result")
@@ -57,7 +62,7 @@ for i, setting in enumerate(SETTINGS, 1):
         "--n-engines", str(setting['n_engines']),
         "--arrival-rate", str(setting['arrival_rate']),
         "--alpha", str(setting['alpha']),
-        "--multi-tenant"  # Enable multi-tenant mode
+        # "--multi-tenant"  # Enable multi-tenant mode
     ]
     
     # Run the simulation

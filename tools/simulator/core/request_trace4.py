@@ -2,7 +2,6 @@ import enum
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from simulator.core.internal.configs.hardware_params import hardware_params  # noqa: F401 (kept for parity)
 from .new_obtain_latency import build_latency_dict as build_latency_dict_trace4
 
 
@@ -19,13 +18,16 @@ STANDARD_WORKFLOW = [
     "Selector",
     "Decomposer",
     "Refiner",
+    "Refiner",
+    "Refiner",
+    "Refiner",
 ]
 
 
 # I/O length per step for trace4
 EMPIRICAL_IO_LEN = {
-    "Selector": (2954, 112),
-    "Decomposer": (2302, 135),
+    "Selector": (2962, 143),
+    "Decomposer": (2310, 215),
     "Refiner": (1729, 555),
 }
 
@@ -37,15 +39,21 @@ LATENCY_DICT_LOOKUP = {
 }
 
 
-def calculate_empirical_time(hardware_name: str, input_len: int, output_len: int) -> float:
+def calculate_empirical_time_by_io(hardware_name: str, input_len: int, output_len: int) -> float:
     latency_dict = LATENCY_DICT_LOOKUP[hardware_name]
     return latency_dict[(input_len, output_len)]["latency"]
+
+
+def calculate_empirical_time(hardware_name: str, step_name: str) -> float:
+    """Empirical time by step using default IO lengths for trace4."""
+    input_len, output_len = EMPIRICAL_IO_LEN[step_name]
+    return calculate_empirical_time_by_io(hardware_name, input_len, output_len)
 
 
 def calculate_avg_empirical_time(hardware_lst: List[str], input_len: int, output_len: int) -> float:
     total_time = 0.0
     for hardware_name in hardware_lst:
-        total_time += calculate_empirical_time(hardware_name, input_len, output_len)
+        total_time += calculate_empirical_time_by_io(hardware_name, input_len, output_len)
     return total_time / max(len(hardware_lst), 1)
 
 
@@ -90,7 +98,7 @@ class GenerationRequest:
         self.status = REQ_STATUS.EXIT
 
     def calculate_empirical_time(self, hardware_name: str) -> float:
-        return calculate_empirical_time(hardware_name, self.input_length, self.output_length)
+        return calculate_empirical_time_by_io(hardware_name, self.input_length, self.output_length)
 
     def update_urgency(self, hardware_name: str):
         empirical_time = self.calculate_empirical_time(hardware_name)
@@ -139,17 +147,20 @@ class Text2SQLRequest:
         self.tenant_id = tenant_id
         self._initialize_stages()
         self.total_stages = len(self.stage_lst)
-        self.standard_workflow = STANDARD_WORKFLOW.copy()
+        # self.standard_workflow = STANDARD_WORKFLOW.copy()
         self.hardware_lst = hardware_lst or ["nvidia_A100"]
 
     def _initialize_stages(self):
         for stage_config in self.gen_requests_config:
             self.stage_lst.append(stage_config["step"])
+        self.standard_workflow = self.stage_lst.copy()
 
     def create_current_stage_requests(self, model, arrive_at: float) -> List[Optional[GenerationRequest]]:
         current_step = self.stage_lst[self.current_stage]
         if current_step in self.standard_workflow:
             self.standard_workflow.remove(current_step)
+        # if current_step == "Decomposer" and "Selector" in self.standard_workflow:
+        #     self.standard_workflow.remove("Selector")
 
         # Calculate per-step SLO proportionally by average empirical time using provided input/output lengths
         # We look up the first config that matches the current step
@@ -169,23 +180,11 @@ class Text2SQLRequest:
         # Remaining workflow time estimate
         remaining_est = 0.0
         # Estimate remaining steps using their configured input/output from gen_requests_config order
-        for sidx in range(self.current_stage + 1, len(self.stage_lst)):
-            step_name = self.stage_lst[sidx]
-            # use provided cfg if exists else default lens
-            found = False
-            # for cfg in self.gen_requests_config:
-            #     if cfg["step"] == step_name:
-            #         il = cfg.get("input_length")
-            #         ol = cfg.get("output_length")
-            #         if il is not None and ol is not None:
-            #             remaining_est += calculate_avg_empirical_time(self.hardware_lst, il, ol)
-            #             found = True
-            #         break
-            if not found:
-                il, ol = EMPIRICAL_IO_LEN[step_name]
-                remaining_est += calculate_avg_empirical_time(self.hardware_lst, il, ol)
+        for s in self.standard_workflow:
+            il, ol = EMPIRICAL_IO_LEN[s]
+            remaining_est += calculate_avg_empirical_time(self.hardware_lst, il, ol)
 
-        denom = cur_avg + remaining_est if (cur_avg + remaining_est) > 0 else 1.0
+        denom = cur_avg + remaining_est
         step_slo = (self.slo - self.total_time) * (cur_avg / denom)
 
         next_request = GenerationRequest(

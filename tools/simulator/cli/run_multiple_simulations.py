@@ -3,7 +3,7 @@ import subprocess
 import time  # Import the time module
 
 def run_simulations(input_file, n_engines, arrival_rates, gpu_count):
-    alpha_values = [round(0.1 * i, 1) for i in range(0, 11)]  # 0, 0.1, ..., 1.0
+    alpha_values = [round(0.1 * i, 1) for i in range(5, 11)]  # 0, 0.1, ..., 1.0
     # alpha_values = [0.0]
 
     for arrival_rate in arrival_rates:
@@ -45,9 +45,9 @@ def run_simulations(input_file, n_engines, arrival_rates, gpu_count):
 
 if __name__ == "__main__":
 
-    input_file = "./input_file_trace3.json"
-    n_engines = 2
+    input_file = "./input_file_trace1.json"
+    n_engines = 1
     arrival_rates = [0.5]  # Iterate over both arrival rates
-    gpu_count = 2
+    gpu_count = 3
 
     run_simulations(input_file, n_engines, arrival_rates, gpu_count)

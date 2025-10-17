@@ -35,9 +35,6 @@ EMPIRICAL_IO_LEN = {"Information Retriever": (308, 5),
                   "generate_unit_test": (1109, 103),
                   "evaluate": (961, 22)}
 
-EMPIRICAL_IO_LEN_NEW = {"Selector": (2954, 112),
-                        "Decomposer": (2302, 135),
-                        "Refiner": (1729, 555)}
 
 EMPIRICAL_TIME_A100 = {"Information Retriever": 0.2253,   # 0.2475
                         "extract_keywords": 1.1359,      #1.8238

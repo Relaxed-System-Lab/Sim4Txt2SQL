@@ -21,7 +21,7 @@ class OPGlobalEngine:
     def __init__(self, alpha, mode):
         self.alpha = alpha
         self.hardware_lst = []
-        self._is_trace4 = False
+        self._is_trace4 = True
         if mode == "hexflow":
             self.engines = defaultdict(list[LLMEngineOptimized])
         elif mode == "vtc":
@@ -113,11 +113,15 @@ class OPGlobalEngine:
             tenant1_slo = slo
             tenant2_slo = slo
         
-        # Choose request class based on detected workflow
+        # Choose request class and empirical time fn based on detected workflow
         if self._is_trace4:
             from simulator.core.request_trace4 import Text2SQLRequest as _RequestCls
+            from simulator.core.request_trace4 import calculate_empirical_time as _calc_empirical
         else:
             from simulator.core.request import Text2SQLRequest as _RequestCls
+            from simulator.core.request import calculate_empirical_time as _calc_empirical
+        # Set policy empirical time function
+        self.policy.set_empirical_time_fn(_calc_empirical)
 
         # for idx, request_data in enumerate([data[1]]):
         for idx, request_data in enumerate(data):

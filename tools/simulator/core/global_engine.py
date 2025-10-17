@@ -37,7 +37,7 @@ class LLMGlobalEngine:
         self.total_requests = 0
         self.policy = EvenGTLPolicy()  # All modes use EvenGTLPolicy (round robin)
         self.text2sql_requests: Dict[str, Text2SQLRequest] = {}
-        self._is_trace4 = False
+        self._is_trace4 = True
 
 
     def add_engine(self, model_name, hardware_name, w_bit, a_bit, kv_bit, w1=1):
